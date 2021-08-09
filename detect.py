@@ -59,8 +59,25 @@ def detect(save_img=False):
     t0 = time.time()
     img = torch.zeros((1, 3, imgsz, imgsz), device=device)  # init img
     _ = model(img.half() if half else img) if device.type != 'cpu' else None  # run once
-    for path, img, im0s, vid_cap in dataset:
-        img = torch.from_numpy(img).to(device)
+
+    # for path, img, im0s, vid_cap in dataset:
+    vid_cap = cv2.VideoCapture('c:\\Users\\karol\\Videos\\0002-20170519-2.mp4')
+    counter=0
+
+    fourcc = 'mp4v'  # output video codec
+    fps = vid_cap.get(cv2.CAP_PROP_FPS)
+    w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    vid_writer = cv2.VideoWriter(str(save_dir/'result.mp4'), cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
+    while True:
+        print(counter)
+        ret, frame = vid_cap.read()
+        if frame is None:
+            break
+        resized = cv2.resize(frame,(imgsz,int(imgsz*frame.shape[0]/frame.shape[1])))
+        # resized = cv2.resize(frame,(imgsz,imgsz))
+        # print(resized.shape)
+        img = torch.from_numpy(resized).permute(2,0,1).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
@@ -75,24 +92,23 @@ def detect(save_img=False):
         t2 = time_synchronized()
 
         # Apply Classifier
-        if classify:
-            pred = apply_classifier(pred, modelc, img, im0s)
+        # if classify:
+        #     pred = apply_classifier(pred, modelc, img, im0s)
 
         # Process detections
         for i, det in enumerate(pred):  # detections per image
-            if webcam:  # batch_size >= 1
-                p, s, im0 = Path(path[i]), '%g: ' % i, im0s[i].copy()
-            else:
-                p, s, im0 = Path(path), '', im0s
-
-            save_path = str(save_dir / p.name)
-            txt_path = str(save_dir / 'labels' / p.stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
+            # if webcam:  # batch_size >= 1
+            #     p, s, im0 = Path(path[i]), '%g: ' % i, im0s[i].copy()
+            # else:
+            #     p, s, im0 = Path(path), '', im0s
+            s='%05d '%counter
+            # save_path = str(save_dir / '%08d.jpg'%counter)
+            # txt_path = str(save_dir / 'labels' / p.stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
-            gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+            gn = torch.tensor(frame.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
                 # Rescale boxes from img_size to im0 size
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
-
+                det[:,:4] = scale_coords(img.shape[2:], det[:, :4], frame.shape).round()
                 # Print results
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
@@ -106,36 +122,17 @@ def detect(save_img=False):
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
-                    if save_img or view_img:  # Add bbox to image
-                        label = '%s %.2f' % (names[int(cls)], conf)
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                    # if save_img or view_img:  # Add bbox to image
+                    label = '%s %.2f' % (names[int(cls)], conf)
+                    plot_one_box(xyxy, frame, label=label, color=colors[int(cls)], line_thickness=3)
+        txt = "YOLOR %s %dx%d pred+nms on RTX2070 Lenovo Legion Y740-15: %.2fs (%.1f Hz)"%(weights[0], resized.shape[1],resized.shape[0],t2-t1, 1.0/(t2-t1))
+        cv2.putText(frame,txt, (100,100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,0),16)
+        cv2.putText(frame,txt, (100,100), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255),6)
 
-            # Print time (inference + NMS)
-            print('%sDone. (%.3fs)' % (s, t2 - t1))
+        cv2.imwrite(str(save_dir/('%08d.jpg'%counter)), frame)
 
-            # Stream results
-            if view_img:
-                cv2.imshow(p, im0)
-                if cv2.waitKey(1) == ord('q'):  # q to quit
-                    raise StopIteration
-
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'images':
-                    cv2.imwrite(save_path, im0)
-                else:
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-
-                        fourcc = 'mp4v'  # output video codec
-                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
-                    vid_writer.write(im0)
-
+        vid_writer.write(frame)
+        counter=counter+1
     if save_txt or save_img:
         print('Results saved to %s' % save_dir)
 

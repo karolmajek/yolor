@@ -592,7 +592,12 @@ class DownC(nn.Module):
         self.mp = nn.MaxPool2d(kernel_size=k, stride=k)
 
     def forward(self, x):
-        return torch.cat((self.cv2(self.cv1(x)), self.cv3(self.mp(x))), dim=1)
+        # print(self.cv2,self.cv3)
+        _2,_3 = (self.cv2(self.cv1(x)), self.cv3(self.mp(x)))
+        # print(_2.shape, _3.shape)
+        return torch.cat((_2,_3), dim=1)
+        # return torch.cat((self.cv2(self.cv1(x)), self.cv3(self.mp(x))), dim=1)
+
 
 
 class DNL(nn.Module):
